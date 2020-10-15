@@ -1,14 +1,15 @@
-﻿using Couchbase;
-using Couchbase.Extensions.DependencyInjection;
-using Couchbase.Management.Buckets;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using System;
-
-namespace CouchbaseDemo
+﻿namespace CouchbaseDemo
 {
+    using System;
+    using System.Diagnostics;
+
+    using Couchbase;
+    using Couchbase.Extensions.DependencyInjection;
+
+    using Microsoft.Extensions.Configuration;
+    using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Logging;
+
     /// <summary>
     /// SOURCE: https://docs.couchbase.com/tutorials/quick-start/quickstart-dotnet27-aspnetcore31-visualstudio-firstquery-cb65.html
     /// </summary>
@@ -38,24 +39,44 @@ namespace CouchbaseDemo
             Logger.LogInformation($"{nameof(Program)} class has been instantiated.\n\n");
         }
 
-        static async System.Threading.Tasks.Task Main(string[] args)
+        /// <summary>
+        /// The main.
+        /// </summary>
+        /// <param name="args">
+        /// The args.
+        /// </param>
+        /// <returns>
+        /// The <see cref="System.Threading.Tasks.Task"/>.
+        /// </returns>
+        public static async System.Threading.Tasks.Task Main(string[] args)
         {
-            /* var bucketProvider = Services.GetRequiredService<IBucketProvider>();
-            var bucket = await bucketProvider.GetBucketAsync("default"); */
+            var watch = new Stopwatch();
 
-            var cluster = await Cluster.ConnectAsync("http://localhost:8091", "admin", "Demo.01");            
-            var buckets = await cluster.Buckets.GetAllBucketsAsync();
-                        
-            var bucket = await cluster.BucketAsync("default-1");
+            var bucketProvider = Services.GetRequiredService<IBucketProvider>();
+            var bucket = await bucketProvider.GetBucketAsync("mybucket");
+
+            /* var cluster = await Cluster.ConnectAsync("couchbase://localhost", "Administrator", "Password");                        
+            var bucket = await cluster.BucketAsync("mybucket"); */
+
             var collection = bucket.DefaultCollection();
 
-            var key = Guid.NewGuid().ToString();
-            var user = new User() { FirstName = "Mohammed", LastName = "Hoque", Email = "test@mail.com" };
-            _ = await collection.UpsertAsync(key, user);
+            watch.Start();
 
-            Console.WriteLine();
-            var cbLifetimeService = Services.GetRequiredService<ICouchbaseLifetimeService>();
-            await cbLifetimeService.CloseAsync();
+            for (int i = 0; i < 1000; i++)
+            {
+                var key = $"user-{i}::{Guid.NewGuid()}";
+                var user = new User() { FirstName = $"FirstName_{i}", LastName = $"LastName_{i}", Email = $"test.{i}@mail.com" };
+
+               _  = await collection.UpsertAsync(key, user);
+               // Console.WriteLine($"MutationToken: {token.MutationToken}");
+            }
+
+            watch.Stop();
+
+            Console.WriteLine($"Elapsed: {watch.ElapsedMilliseconds} ms.");
+
+            var cloudBaseLifetimeService = Services.GetRequiredService<ICouchbaseLifetimeService>();
+            await cloudBaseLifetimeService.CloseAsync();
         }
 
         private static void Configure(IServiceCollection services, string[] args)
@@ -75,9 +96,9 @@ namespace CouchbaseDemo
                     builder.AddConsole();
                 });
 
+            // https://docs.couchbase.com/dotnet-sdk/current/ref/client-settings.html
             var config = configBuilder.Build();
-            var cbConfig = config.GetSection("Couchbase");
-            services.AddCouchbase(cbConfig);            
+            services.AddCouchbase(config.GetSection("CouchbaseClusterOptions"));            
         }
     }
 }
